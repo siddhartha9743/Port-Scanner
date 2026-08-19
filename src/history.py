@@ -3,33 +3,23 @@ from pathlib import Path
 from typing import Any
 
 
-def save_scan_history(
-    path: str,
-    scan_data: dict[str, Any],
-    summary: dict[str, Any],
-) -> None:
-    """
-    Append one scan record to a JSON Lines history file.
-    """
+from pathlib import Path
+import json
+
+
+def save_scan_history(path, scan_metadata, summary):
+    history_path = Path(path)
+
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+
     record = {
-        "scan": scan_data,
+        "scan": scan_metadata,
         "summary": summary,
     }
 
-    history_path = Path(path)
-
-    with history_path.open(
-        "a",
-        encoding="utf-8",
-    ) as file:
-        file.write(
-            json.dumps(
-                record,
-                ensure_ascii=False,
-            )
-        )
-        file.write("\n")
-
+    with history_path.open("a", encoding="utf-8") as handle:
+        json.dump(record, handle)
+        handle.write("\n")
 
 def load_scan_history(
     path: str,

@@ -729,3 +729,118 @@ def test_cli_view_missing_history(tmp_path, capsys):
     captured = capsys.readouterr()
 
     assert "No scan history found." in captured.out
+def test_cli_view_empty_history(tmp_path, capsys):
+    from src.main import main
+
+    history_file = tmp_path / "empty-history.jsonl"
+    history_file.write_text("")
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "No scan history found." in captured.out
+
+
+def test_cli_view_multiple_history_records(tmp_path, capsys):
+    from src.main import main
+
+    history_file = tmp_path / "history.jsonl"
+
+    records = [
+        {
+            "scan": {
+                "target": "127.0.0.1",
+                "resolved_ip": "127.0.0.1",
+                "profile": None,
+                "started_at": "2026-08-19T00:00:00+00:00",
+                "finished_at": "2026-08-19T00:00:01+00:00",
+                "duration_seconds": 0.001,
+                "ports_scanned": 1,
+                "workers": 50,
+                "timeout_seconds": 1.0,
+            },
+            "summary": {
+                "open": 0,
+                "closed": 1,
+                "timeout": 0,
+            },
+        },
+        {
+            "scan": {
+                "target": "localhost",
+                "resolved_ip": "127.0.0.1",
+                "profile": "quick",
+                "started_at": "2026-08-19T00:01:00+00:00",
+                "finished_at": "2026-08-19T00:01:01+00:00",
+                "duration_seconds": 0.002,
+                "ports_scanned": 14,
+                "workers": 50,
+                "timeout_seconds": 0.5,
+            },
+            "summary": {
+                "open": 1,
+                "closed": 13,
+                "timeout": 0,
+            },
+        },
+    ]
+
+    history_file.write_text(
+        "\n".join(json.dumps(record) for record in records) + "\n"
+    )
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "127.0.0.1" in captured.out
+    assert "localhost" in captured.out
+    assert "14" in captured.out
+
+
+def test_cli_history_creates_missing_parent_directory(tmp_path, capsys):
+    from src.main import main
+
+    history_file = tmp_path / "nested" / "history.jsonl"
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "127.0.0.1",
+        "--ports",
+        "22",
+        "--history",
+        str(history_file),
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert history_file.exists()
+    assert "Scan history appended to:" in captured.out
+
