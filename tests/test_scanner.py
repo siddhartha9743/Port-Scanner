@@ -2244,3 +2244,84 @@ def test_cli_view_history_limit_without_value_rejected(tmp_path, capsys):
 
     assert "argument --limit: expected one argument" in captured.err
 
+
+def test_cli_view_history_limit_non_integer(tmp_path, capsys):
+    from src.main import main
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+    history_file.write_text("", encoding="utf-8")
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+        "--limit",
+        "abc",
+    ]
+
+    try:
+        with pytest.raises(SystemExit):
+            main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "invalid int value" in captured.err
+
+
+def test_cli_view_history_limit_float_rejected(tmp_path, capsys):
+    from src.main import main
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+    history_file.write_text("", encoding="utf-8")
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+        "--limit",
+        "2.5",
+    ]
+
+    try:
+        with pytest.raises(SystemExit):
+            main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "invalid int value" in captured.err
+
+
+def test_cli_view_history_limit_decimal_string_rejected(tmp_path, capsys):
+    from src.main import main
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+    history_file.write_text("", encoding="utf-8")
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+        "--limit",
+        "01.0",
+    ]
+
+    try:
+        with pytest.raises(SystemExit):
+            main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "invalid int value" in captured.err
+
