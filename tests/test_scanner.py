@@ -2,7 +2,8 @@ import socket
 import threading
 
 import pytest
-
+import sys
+import json
 from src.main import parse_ports
 from src.profiles import get_profile, list_profiles
 from src.scanner import PortStatus, grab_banner, scan_port, scan_ports
@@ -578,3 +579,153 @@ def test_cli_quick_profile(capsys):
 
     assert output["scan"]["profile"] == "quick"
     assert output["scan"]["ports_scanned"] == 14
+def test_cli_writes_history(tmp_path, capsys):
+    from src.main import main
+
+    history_file = tmp_path / "history.jsonl"
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "127.0.0.1",
+        "--ports",
+        "22",
+        "--history",
+        str(history_file),
+        "--format",
+        "json",
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    capsys.readouterr()
+
+    assert history_file.exists()
+
+    lines = history_file.read_text().strip().splitlines()
+    assert len(lines) == 1
+
+    record = json.loads(lines[0])
+
+    assert record["scan"]["target"] == "127.0.0.1"
+    assert record["scan"]["ports_scanned"] == 1
+    assert record["summary"]["open"] == 0
+    assert record["summary"]["closed"] == 1
+    assert record["summary"]["timeout"] == 0
+
+
+def test_cli_appends_history(tmp_path, capsys):
+    from src.main import main
+
+    history_file = tmp_path / "history.jsonl"
+
+    old_argv = sys.argv
+
+    try:
+        sys.argv = [
+            "main.py",
+            "127.0.0.1",
+            "--ports",
+            "22",
+            "--history",
+            str(history_file),
+        ]
+
+        main()
+        capsys.readouterr()
+
+        sys.argv = [
+            "main.py",
+            "127.0.0.1",
+            "--ports",
+            "80",
+            "--history",
+            str(history_file),
+        ]
+
+        main()
+        capsys.readouterr()
+
+    finally:
+        sys.argv = old_argv
+
+    lines = history_file.read_text().strip().splitlines()
+
+    assert len(lines) == 2
+
+    first = json.loads(lines[0])
+    second = json.loads(lines[1])
+
+    assert first["scan"]["ports_scanned"] == 1
+    assert second["scan"]["ports_scanned"] == 1
+    assert first["scan"]["target"] == "127.0.0.1"
+    assert second["scan"]["target"] == "127.0.0.1"
+
+
+def test_cli_view_history(tmp_path, capsys):
+    from src.main import main
+
+    history_file = tmp_path / "history.jsonl"
+
+    record = {
+        "scan": {
+            "target": "127.0.0.1",
+            "resolved_ip": "127.0.0.1",
+            "profile": None,
+            "started_at": "2026-08-19T00:00:00+00:00",
+            "finished_at": "2026-08-19T00:00:01+00:00",
+            "duration_seconds": 0.001,
+            "ports_scanned": 2,
+            "workers": 50,
+            "timeout_seconds": 1.0,
+        },
+        "summary": {
+            "open": 0,
+            "closed": 2,
+            "timeout": 0,
+        },
+    }
+
+    history_file.write_text(json.dumps(record) + "\n")
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "127.0.0.1" in captured.out
+    assert "2" in captured.out
+
+
+def test_cli_view_missing_history(tmp_path, capsys):
+    from src.main import main
+
+    history_file = tmp_path / "missing-history.jsonl"
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "No scan history found." in captured.out
