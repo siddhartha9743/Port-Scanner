@@ -1,0 +1,467 @@
+import socket
+import threading
+
+import pytest
+
+from src.main import parse_ports
+from src.profiles import get_profile, list_profiles
+from src.scanner import PortStatus, grab_banner, scan_port, scan_ports
+from src.services import get_service_name
+
+
+def start_test_server():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+
+    port = server.getsockname()[1]
+
+    def accept_connection():
+        connection, _ = server.accept()
+        connection.close()
+        server.close()
+
+    thread = threading.Thread(
+        target=accept_connection,
+        daemon=True,
+    )
+    thread.start()
+
+    return port
+
+
+def start_banner_server(banner: str):
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+
+    port = server.getsockname()[1]
+
+    def accept_connection():
+        connection, _ = server.accept()
+
+        try:
+            connection.sendall(banner.encode("utf-8"))
+        finally:
+            connection.close()
+            server.close()
+
+    thread = threading.Thread(
+        target=accept_connection,
+        daemon=True,
+    )
+    thread.start()
+
+    return port
+
+
+def test_open_port():
+    port = start_test_server()
+
+    assert scan_port("127.0.0.1", port) == PortStatus.OPEN
+
+
+def test_closed_port():
+    temp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    temp_socket.bind(("127.0.0.1", 0))
+
+    port = temp_socket.getsockname()[1]
+    temp_socket.close()
+
+    assert scan_port("127.0.0.1", port) == PortStatus.CLOSED
+
+
+def test_grab_banner():
+    port = start_banner_server("TEST-SERVICE 1.0\r\n")
+
+    assert grab_banner("127.0.0.1", port) == "TEST-SERVICE 1.0"
+
+
+def test_grab_banner_timeout():
+    port = start_test_server()
+
+    assert grab_banner("127.0.0.1", port, timeout=0.01) == ""
+
+
+def test_parse_single_port():
+    assert parse_ports("22") == [22]
+
+
+def test_parse_multiple_ports():
+    assert parse_ports("22,80,443") == [22, 80, 443]
+
+
+def test_parse_range():
+    assert parse_ports("1-5") == [1, 2, 3, 4, 5]
+
+
+def test_parse_mixed_ports():
+    assert parse_ports("22,80-82,443") == [22, 80, 81, 82, 443]
+
+
+def test_parse_duplicate_ports():
+    assert parse_ports("80,80,81") == [80, 81]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "0",
+        "65536",
+        "100-50",
+        "abc",
+        "80-",
+        "-80",
+        "",
+    ],
+)
+def test_invalid_ports(value):
+    with pytest.raises(ValueError):
+        parse_ports(value)
+
+
+def test_known_service():
+    assert get_service_name(22) == "SSH"
+
+
+def test_http_alt_service():
+    assert get_service_name(8080) == "HTTP-ALT"
+
+
+def test_unknown_service():
+    assert get_service_name(9999) == "UNKNOWN"
+
+
+def test_invalid_timeout():
+    with pytest.raises(ValueError):
+        scan_ports(
+            "127.0.0.1",
+            [80],
+            timeout=0,
+        )
+
+
+def test_quick_profile():
+    profile = get_profile("quick")
+
+    assert profile.name == "quick"
+    assert profile.ports == (
+        "21,22,23,25,53,80,110,143,443,3306,5432,6379,8080,8443"
+    )
+    assert profile.timeout == 0.5
+    assert profile.workers == 50
+
+
+def test_standard_profile():
+    profile = get_profile("standard")
+
+    assert profile.name == "standard"
+    assert profile.ports == "1-1024"
+    assert profile.timeout == 1.0
+    assert profile.workers == 50
+
+
+def test_full_profile():
+    profile = get_profile("full")
+
+    assert profile.name == "full"
+    assert profile.ports == "1-65535"
+    assert profile.timeout == 1.0
+    assert profile.workers == 100
+
+
+def test_list_profiles():
+    profiles = list_profiles()
+
+    assert [profile.name for profile in profiles] == [
+        "quick",
+        "standard",
+        "full",
+    ]
+
+
+def test_unknown_profile():
+    with pytest.raises(ValueError):
+        get_profile("does-not-exist")
+def test_resolve_target_ip():
+    from src.main import resolve_target
+
+    assert resolve_target("127.0.0.1") == "127.0.0.1"
+
+
+def test_resolve_invalid_target():
+    from src.main import resolve_target
+
+    with pytest.raises(ValueError):
+        resolve_target(
+            "definitely-not-a-real-host-12345"
+        )
+
+
+def test_max_ports_constant():
+    from src.main import MAX_PORTS
+
+    assert MAX_PORTS == 10_000
+def test_utc_timestamp():
+    from src.main import utc_timestamp
+
+    timestamp = utc_timestamp()
+
+    assert timestamp.endswith("+00:00")
+    assert "T" in timestamp
+def test_scan_history_round_trip(tmp_path):
+    from src.history import (
+        load_scan_history,
+        save_scan_history,
+    )
+
+    history_file = tmp_path / "history.jsonl"
+
+    scan_data = {
+        "target": "127.0.0.1",
+        "resolved_ip": "127.0.0.1",
+        "ports_scanned": 2,
+    }
+
+    summary = {
+        "open": 1,
+        "closed": 1,
+        "timeout": 0,
+    }
+
+    save_scan_history(
+        str(history_file),
+        scan_data,
+        summary,
+    )
+
+    records = load_scan_history(
+        str(history_file)
+    )
+
+    assert len(records) == 1
+    assert records[0]["scan"]["target"] == "127.0.0.1"
+    assert records[0]["scan"]["ports_scanned"] == 2
+    assert records[0]["summary"]["open"] == 1
+
+
+def test_load_missing_history(tmp_path):
+    from src.history import load_scan_history
+
+    history_file = tmp_path / "missing.jsonl"
+
+    assert load_scan_history(
+        str(history_file)
+    ) == []
+def test_config_rejects_zero_workers():
+    from src.config import create_config
+
+    with pytest.raises(ValueError, match="workers"):
+        create_config(workers=0)
+
+
+def test_config_rejects_negative_timeout():
+    from src.config import create_config
+
+    with pytest.raises(ValueError, match="timeout"):
+        create_config(timeout=-1)
+
+
+def test_config_rejects_zero_max_ports():
+    from src.config import create_config
+
+    with pytest.raises(ValueError, match="max_ports"):
+        create_config(max_ports=0)
+def test_load_config_from_json(tmp_path):
+    from src.config import load_config
+
+    config_file = tmp_path / "config.json"
+
+    config_file.write_text(
+        '{"workers": 10, "timeout": 0.5, "max_ports": 5000}',
+        encoding="utf-8",
+    )
+
+    config = load_config(str(config_file))
+
+    assert config.workers == 10
+    assert config.timeout == 0.5
+    assert config.max_ports == 5000
+
+
+def test_load_config_missing_file():
+    from src.config import load_config
+
+    with pytest.raises(
+        ValueError,
+        match="Configuration file not found",
+    ):
+        load_config("/tmp/does-not-exist-port-scanner.json")
+
+
+def test_load_config_invalid_json(tmp_path):
+    from src.config import load_config
+
+    config_file = tmp_path / "invalid.json"
+
+    config_file.write_text(
+        "{not valid json",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Invalid configuration JSON",
+    ):
+        load_config(str(config_file))
+
+
+def test_load_config_invalid_values(tmp_path):
+    from src.config import load_config
+
+    config_file = tmp_path / "invalid-values.json"
+
+    config_file.write_text(
+        '{"workers": 0, "timeout": 1.0, "max_ports": 10000}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="workers must be at least 1",
+    ):
+        load_config(str(config_file))
+def test_cli_requires_target_or_history(capsys):
+    from src.main import main
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = ["main.py"]
+
+    try:
+        with pytest.raises(SystemExit):
+            main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "target is required unless --view-history is used" in captured.err
+
+
+def test_cli_requires_ports_or_profile(capsys):
+    from src.main import main
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = ["main.py", "127.0.0.1"]
+
+    try:
+        with pytest.raises(SystemExit):
+            main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "one of --ports or --profile is required" in captured.err
+
+
+def test_cli_rejects_invalid_workers(capsys):
+    from src.main import main
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "127.0.0.1",
+        "--ports",
+        "22",
+        "--workers",
+        "0",
+    ]
+
+    try:
+        with pytest.raises(SystemExit):
+            main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "workers must be at least 1" in captured.err
+
+
+def test_cli_rejects_invalid_timeout(capsys):
+    from src.main import main
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "127.0.0.1",
+        "--ports",
+        "22",
+        "--timeout",
+        "0",
+    ]
+
+    try:
+        with pytest.raises(SystemExit):
+            main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "timeout must be greater than 0" in captured.err
+
+
+def test_cli_requires_output_for_csv(capsys):
+    from src.main import main
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "127.0.0.1",
+        "--ports",
+        "22",
+        "--format",
+        "csv",
+    ]
+
+    try:
+        with pytest.raises(SystemExit):
+            main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "--output is required when using --format csv" in captured.err
+
+
+def test_cli_rejects_ports_and_profile_together(capsys):
+    from src.main import main
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "127.0.0.1",
+        "--ports",
+        "22",
+        "--profile",
+        "quick",
+    ]
+
+    try:
+        with pytest.raises(SystemExit):
+            main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "--ports and --profile cannot be used together" in captured.err
