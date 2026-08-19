@@ -465,3 +465,116 @@ def test_cli_rejects_ports_and_profile_together(capsys):
     captured = capsys.readouterr()
 
     assert "--ports and --profile cannot be used together" in captured.err
+def test_cli_json_output(capsys):
+    from src.main import main
+    import json
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "127.0.0.1",
+        "--ports",
+        "22",
+        "--format",
+        "json",
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+    output = json.loads(captured.out)
+
+    assert output["scan"]["target"] == "127.0.0.1"
+    assert output["scan"]["ports_scanned"] == 1
+    assert output["summary"]["closed"] == 1
+    assert output["results"][0]["port"] == 22
+
+
+def test_cli_csv_output(tmp_path, capsys):
+    from src.main import main
+    import sys
+
+    output_file = tmp_path / "scan.csv"
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "127.0.0.1",
+        "--ports",
+        "22",
+        "--format",
+        "csv",
+        "--output",
+        str(output_file),
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert output_file.exists()
+    assert "CSV report written to:" in captured.out
+
+    content = output_file.read_text()
+    assert "22" in content
+    assert "CLOSED" in content
+
+
+def test_cli_open_only(capsys):
+    from src.main import main
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "127.0.0.1",
+        "--ports",
+        "22",
+        "--open-only",
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "PORT" in captured.out
+    assert "22" not in captured.out
+    assert "Open: 0" in captured.out
+
+
+def test_cli_quick_profile(capsys):
+    from src.main import main
+    import sys
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "127.0.0.1",
+        "--profile",
+        "quick",
+        "--format",
+        "json",
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    import json
+    output = json.loads(captured.out)
+
+    assert output["scan"]["profile"] == "quick"
+    assert output["scan"]["ports_scanned"] == 14
