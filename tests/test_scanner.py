@@ -898,3 +898,148 @@ def test_cli_view_history_rejects_invalid_json_line(tmp_path, capsys):
     captured = capsys.readouterr()
 
     assert "Expecting" in captured.err or "JSON" in captured.err
+def test_cli_view_history_missing_scan_section(tmp_path, capsys):
+    from src.main import main
+    import json
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+
+    record = {
+        "summary": {
+            "open": 0,
+            "closed": 1,
+            "timeout": 0,
+        }
+    }
+
+    history_file.write_text(
+        json.dumps(record) + "\n",
+        encoding="utf-8",
+    )
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "UNKNOWN" in captured.out
+    assert "1" in captured.out
+
+
+def test_cli_view_history_missing_summary_section(tmp_path, capsys):
+    from src.main import main
+    import json
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+
+    record = {
+        "scan": {
+            "target": "127.0.0.1",
+            "ports_scanned": 1,
+        }
+    }
+
+    history_file.write_text(
+        json.dumps(record) + "\n",
+        encoding="utf-8",
+    )
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "127.0.0.1" in captured.out
+    assert "1" in captured.out
+
+
+def test_cli_view_history_invalid_record_structure(tmp_path, capsys):
+    from src.main import main
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+
+    history_file.write_text(
+        "[]\n",
+        encoding="utf-8",
+    )
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+    ]
+
+    try:
+        with pytest.raises(AttributeError):
+            main()
+    finally:
+        sys.argv = old_argv
+
+
+def test_cli_view_history_empty_file(tmp_path, capsys):
+    from src.main import main
+    import sys
+
+    history_file = tmp_path / "empty-history.jsonl"
+    history_file.write_text("", encoding="utf-8")
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "No scan history found." in captured.out
+
+def test_cli_view_history_empty_file(tmp_path, capsys):
+    from src.main import main
+    import sys
+
+    history_file = tmp_path / "empty-history.jsonl"
+    history_file.write_text("", encoding="utf-8")
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "No scan history found." in captured.out
