@@ -2130,3 +2130,117 @@ def test_cli_view_history_limit_on_empty_history(tmp_path, capsys):
 
     assert "No scan history found." in captured.out
 
+
+def test_cli_view_history_limit_negative_large_value(tmp_path, capsys):
+    from src.main import main
+    import json
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+
+    record = {
+        "scan": {
+            "target": "127.0.0.1",
+            "ports_scanned": 1,
+        },
+        "summary": {
+            "open": 0,
+            "closed": 1,
+            "timeout": 0,
+        },
+    }
+
+    history_file.write_text(
+        json.dumps(record) + "\n",
+        encoding="utf-8",
+    )
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+        "--limit",
+        "-100",
+    ]
+
+    try:
+        with pytest.raises(SystemExit):
+            main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "--limit must be at least 1" in captured.err
+
+
+def test_cli_view_history_limit_negative_one(tmp_path, capsys):
+    from src.main import main
+    import json
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+
+    record = {
+        "scan": {
+            "target": "192.0.2.1",
+            "ports_scanned": 1,
+        },
+        "summary": {
+            "open": 0,
+            "closed": 1,
+            "timeout": 0,
+        },
+    }
+
+    history_file.write_text(
+        json.dumps(record) + "\n",
+        encoding="utf-8",
+    )
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+        "--limit",
+        "-1",
+    ]
+
+    try:
+        with pytest.raises(SystemExit):
+            main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "--limit must be at least 1" in captured.err
+
+
+def test_cli_view_history_limit_without_value_rejected(tmp_path, capsys):
+    from src.main import main
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+    history_file.write_text("", encoding="utf-8")
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+        "--limit",
+    ]
+
+    try:
+        with pytest.raises(SystemExit):
+            main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "argument --limit: expected one argument" in captured.err
+
