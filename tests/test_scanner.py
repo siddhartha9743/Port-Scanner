@@ -1145,3 +1145,159 @@ def test_history_viewer_handles_multiple_history_records():
     assert "10.0.0.1" in output
     assert "1.5s" in output
     assert "0.5s" in output
+def test_cli_view_history_prints_header(tmp_path, capsys):
+    from src.main import main
+    import json
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+
+    record = {
+        "scan": {
+            "target": "127.0.0.1",
+            "ports_scanned": 2,
+            "started_at": "2026-08-19T00:00:00+00:00",
+            "duration_seconds": 0.1,
+        },
+        "summary": {
+            "open": 1,
+            "closed": 1,
+            "timeout": 0,
+        },
+    }
+
+    history_file.write_text(
+        json.dumps(record) + "\n",
+        encoding="utf-8",
+    )
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "TARGET" in captured.out
+    assert "PORTS" in captured.out
+    assert "OPEN" in captured.out
+    assert "CLOSED" in captured.out
+    assert "TIMEOUT" in captured.out
+    assert "DURATION" in captured.out
+    assert "STARTED" in captured.out
+
+
+def test_cli_view_history_prints_record_values(tmp_path, capsys):
+    from src.main import main
+    import json
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+
+    record = {
+        "scan": {
+            "target": "192.168.1.10",
+            "ports_scanned": 5,
+            "started_at": "2026-08-19T00:00:00+00:00",
+            "duration_seconds": 1.5,
+        },
+        "summary": {
+            "open": 2,
+            "closed": 2,
+            "timeout": 1,
+        },
+    }
+
+    history_file.write_text(
+        json.dumps(record) + "\n",
+        encoding="utf-8",
+    )
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "192.168.1.10" in captured.out
+    assert "5" in captured.out
+    assert "2" in captured.out
+    assert "1" in captured.out
+    assert "1.5s" in captured.out
+
+
+def test_cli_view_history_prints_multiple_records(tmp_path, capsys):
+    from src.main import main
+    import json
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+
+    records = [
+        {
+            "scan": {
+                "target": "127.0.0.1",
+                "ports_scanned": 1,
+                "started_at": "2026-08-19T00:00:00+00:00",
+                "duration_seconds": 0.1,
+            },
+            "summary": {
+                "open": 0,
+                "closed": 1,
+                "timeout": 0,
+            },
+        },
+        {
+            "scan": {
+                "target": "localhost",
+                "ports_scanned": 3,
+                "started_at": "2026-08-19T00:01:00+00:00",
+                "duration_seconds": 0.3,
+            },
+            "summary": {
+                "open": 1,
+                "closed": 2,
+                "timeout": 0,
+            },
+        },
+    ]
+
+    history_file.write_text(
+        "\n".join(json.dumps(record) for record in records) + "\n",
+        encoding="utf-8",
+    )
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "127.0.0.1" in captured.out
+    assert "localhost" in captured.out
+    assert "1" in captured.out
+    assert "2" in captured.out
+    assert "3" in captured.out
