@@ -1043,3 +1043,105 @@ def test_cli_view_history_empty_file(tmp_path, capsys):
     captured = capsys.readouterr()
 
     assert "No scan history found." in captured.out
+def test_history_viewer_formats_multiple_records():
+    from src.history_viewer import format_history
+
+    records = [
+        {
+            "scan": {
+                "target": "127.0.0.1",
+                "ports_scanned": 2,
+                "started_at": "2026-08-19T00:00:00+00:00",
+                "duration_seconds": 0.1,
+            },
+            "summary": {
+                "open": 1,
+                "closed": 1,
+                "timeout": 0,
+            },
+        },
+        {
+            "scan": {
+                "target": "localhost",
+                "ports_scanned": 3,
+                "started_at": "2026-08-19T00:01:00+00:00",
+                "duration_seconds": 0.2,
+            },
+            "summary": {
+                "open": 2,
+                "closed": 1,
+                "timeout": 0,
+            },
+        },
+    ]
+
+    output = format_history(records)
+
+    assert "127.0.0.1" in output
+    assert "localhost" in output
+    assert "1" in output
+    assert "2" in output
+
+
+def test_history_viewer_empty_history():
+    from src.history_viewer import format_history
+
+    output = format_history([])
+
+    assert output == "No scan history found."
+
+
+def test_history_viewer_handles_missing_fields():
+    from src.history_viewer import format_history
+
+    records = [
+        {
+            "scan": {},
+            "summary": {},
+        }
+    ]
+
+    output = format_history(records)
+
+    assert "UNKNOWN" in output
+    assert "0" in output
+
+
+def test_history_viewer_handles_multiple_history_records():
+    from src.history_viewer import format_history
+
+    records = [
+        {
+            "scan": {
+                "target": "192.168.1.1",
+                "ports_scanned": 10,
+                "started_at": "2026-08-19T00:00:00+00:00",
+                "duration_seconds": 1.5,
+            },
+            "summary": {
+                "open": 2,
+                "closed": 7,
+                "timeout": 1,
+            },
+        },
+        {
+            "scan": {
+                "target": "10.0.0.1",
+                "ports_scanned": 5,
+                "started_at": "2026-08-19T00:05:00+00:00",
+                "duration_seconds": 0.5,
+            },
+            "summary": {
+                "open": 0,
+                "closed": 5,
+                "timeout": 0,
+            },
+        },
+    ]
+
+    output = format_history(records)
+
+    assert "192.168.1.1" in output
+    assert "10.0.0.1" in output
+    assert "1.5s" in output
+    assert "0.5s" in output
