@@ -1301,3 +1301,168 @@ def test_cli_view_history_prints_multiple_records(tmp_path, capsys):
     assert "1" in captured.out
     assert "2" in captured.out
     assert "3" in captured.out
+# ============================================================
+# Phase 26 - History Limit Tests
+# ============================================================
+
+def test_cli_view_history_limit(tmp_path, capsys):
+    from src.main import main
+    import json
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+
+    records = []
+
+    for index in range(5):
+        records.append(
+            {
+                "scan": {
+                    "target": f"192.168.1.{index + 1}",
+                    "ports_scanned": index + 1,
+                    "started_at": f"2026-08-19T00:00:0{index}+00:00",
+                    "duration_seconds": 0.001,
+                },
+                "summary": {
+                    "open": index,
+                    "closed": 1,
+                    "timeout": 0,
+                },
+            }
+        )
+
+    history_file.write_text(
+        "\n".join(json.dumps(record) for record in records) + "\n",
+        encoding="utf-8",
+    )
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+        "--limit",
+        "2",
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "192.168.1.4" in captured.out
+    assert "192.168.1.5" in captured.out
+    assert "192.168.1.1" not in captured.out
+    assert "192.168.1.2" not in captured.out
+    assert "192.168.1.3" not in captured.out
+
+
+def test_cli_view_history_limit_one(tmp_path, capsys):
+    from src.main import main
+    import json
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+
+    records = [
+        {
+            "scan": {
+                "target": "10.0.0.1",
+                "ports_scanned": 1,
+                "started_at": "2026-08-19T00:00:00+00:00",
+                "duration_seconds": 0.001,
+            },
+            "summary": {
+                "open": 1,
+                "closed": 0,
+                "timeout": 0,
+            },
+        },
+        {
+            "scan": {
+                "target": "10.0.0.2",
+                "ports_scanned": 2,
+                "started_at": "2026-08-19T00:00:01+00:00",
+                "duration_seconds": 0.002,
+            },
+            "summary": {
+                "open": 0,
+                "closed": 2,
+                "timeout": 0,
+            },
+        },
+    ]
+
+    history_file.write_text(
+        "\n".join(json.dumps(record) for record in records) + "\n",
+        encoding="utf-8",
+    )
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+        "--limit",
+        "1",
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "10.0.0.2" in captured.out
+    assert "10.0.0.1" not in captured.out
+
+
+def test_cli_view_history_limit_larger_than_history(
+    tmp_path,
+    capsys,
+):
+    from src.main import main
+    import json
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+
+    record = {
+        "scan": {
+            "target": "127.0.0.1",
+            "ports_scanned": 1,
+            "started_at": "2026-08-19T00:00:00+00:00",
+            "duration_seconds": 0.001,
+        },
+        "summary": {
+            "open": 0,
+            "closed": 1,
+            "timeout": 0,
+        },
+    }
+
+    history_file.write_text(
+        json.dumps(record) + "\n",
+        encoding="utf-8",
+    )
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+        "--limit",
+        "100",
+    ]
+
+    try:
+        main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "127.0.0.1" in captured.out

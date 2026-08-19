@@ -244,6 +244,13 @@ def main() -> None:
         help="Display saved scan history",
     )
 
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Limit displayed history records",
+    )
+
     args = parser.parse_args()
 
     # ---------------------------------------------------------
@@ -255,6 +262,12 @@ def main() -> None:
             records = load_scan_history(args.view_history)
         except (OSError, ValueError) as exc:
             parser.error(str(exc))
+
+        if args.limit is not None:
+            if args.limit < 1:
+                parser.error("--limit must be at least 1")
+
+            records = records[-args.limit:]
 
         print(format_history(records))
         return
