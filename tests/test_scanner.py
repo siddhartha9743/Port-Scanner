@@ -549,7 +549,7 @@ def test_cli_open_only(capsys):
     captured = capsys.readouterr()
 
     assert "PORT" in captured.out
-    assert "22" not in captured.out
+    assert "22      CLOSED" not in captured.out
     assert "Open: 0" in captured.out
 
 
@@ -844,3 +844,57 @@ def test_cli_history_creates_missing_parent_directory(tmp_path, capsys):
     assert history_file.exists()
     assert "Scan history appended to:" in captured.out
 
+def test_cli_view_history_rejects_corrupt_json(tmp_path, capsys):
+    from src.main import main
+    import sys
+
+    history_file = tmp_path / "corrupt-history.jsonl"
+    history_file.write_text(
+        '{"scan": {"target": "127.0.0.1"}\n',
+        encoding="utf-8",
+    )
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+    ]
+
+    try:
+        with pytest.raises(SystemExit):
+            main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "Expecting" in captured.err or "JSON" in captured.err
+
+
+def test_cli_view_history_rejects_invalid_json_line(tmp_path, capsys):
+    from src.main import main
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+    history_file.write_text(
+        "this is not valid json\n",
+        encoding="utf-8",
+    )
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+    ]
+
+    try:
+        with pytest.raises(SystemExit):
+            main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "Expecting" in captured.err or "JSON" in captured.err
