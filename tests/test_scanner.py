@@ -1466,3 +1466,95 @@ def test_cli_view_history_limit_larger_than_history(
     captured = capsys.readouterr()
 
     assert "127.0.0.1" in captured.out
+
+
+def test_cli_view_history_rejects_zero_limit(tmp_path, capsys):
+    from src.main import main
+    import json
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+
+    record = {
+        "scan": {
+            "target": "127.0.0.1",
+            "ports_scanned": 1,
+            "started_at": "2026-08-19T00:00:00+00:00",
+            "duration_seconds": 0.001,
+        },
+        "summary": {
+            "open": 0,
+            "closed": 1,
+            "timeout": 0,
+        },
+    }
+
+    history_file.write_text(
+        json.dumps(record) + "\n",
+        encoding="utf-8",
+    )
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+        "--limit",
+        "0",
+    ]
+
+    try:
+        with pytest.raises(SystemExit):
+            main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "--limit must be at least 1" in captured.err
+
+
+def test_cli_view_history_rejects_negative_limit(tmp_path, capsys):
+    from src.main import main
+    import json
+    import sys
+
+    history_file = tmp_path / "history.jsonl"
+
+    record = {
+        "scan": {
+            "target": "127.0.0.1",
+            "ports_scanned": 1,
+            "started_at": "2026-08-19T00:00:00+00:00",
+            "duration_seconds": 0.001,
+        },
+        "summary": {
+            "open": 0,
+            "closed": 1,
+            "timeout": 0,
+        },
+    }
+
+    history_file.write_text(
+        json.dumps(record) + "\n",
+        encoding="utf-8",
+    )
+
+    old_argv = sys.argv
+    sys.argv = [
+        "main.py",
+        "--view-history",
+        str(history_file),
+        "--limit",
+        "-5",
+    ]
+
+    try:
+        with pytest.raises(SystemExit):
+            main()
+    finally:
+        sys.argv = old_argv
+
+    captured = capsys.readouterr()
+
+    assert "--limit must be at least 1" in captured.err
