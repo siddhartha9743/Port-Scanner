@@ -34,7 +34,7 @@ The scanner itself uses only Python's standard library.
 Clone the repository and enter the project directory:
 
 ```bash
-git clone https://github.com/siddhartha9743/Port-Scanner.git
+git clone https://github.com/siddhartha9743/Port-scanner.git
 cd port-scanner
 ```
 
